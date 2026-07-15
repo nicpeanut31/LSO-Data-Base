@@ -1,0 +1,16 @@
+VALIDATION RESULTS
+==================
+
+- JavaScript syntax checked with Node.js: PASS
+- supabase-setup.sql parsed as PostgreSQL SQL: PASS
+- index.html local script and stylesheet references: PASS
+- Existing attendance, membership workflow, reports, dashboard, styles, and
+  workflow files were preserved from the supplied upgrade.
+
+Not externally testable without a reachable Supabase project:
+- Live database RPC execution
+- Cross-device synchronization
+- Login against the user's actual project
+
+The configured Project URL failed an external reachability check. Verify it in
+Supabase > Connect before deployment.

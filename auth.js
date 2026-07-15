@@ -1,43 +1,39 @@
 (() => {
   'use strict';
 
-  const ACCOUNTS_KEY = 'lso_local_accounts_v2';
-  const LEGACY_ACCOUNTS_KEY = 'lso_local_accounts_v1';
-  const SESSION_KEY = 'lso_active_account_v2';
+  const SESSION_KEY = 'lso_shared_session_v1';
   const DEFAULT_USERNAME = 'SNA1161';
   const DEFAULT_PASSWORD = 'SNA1161';
-
   const el = (id) => document.getElementById(id);
   const normalizeUsername = (value) => String(value || '').trim().toLowerCase();
+
+  let accountsCache = [];
+  let accountRefreshTimer = null;
 
   function emit(name, detail = {}) {
     window.dispatchEvent(new CustomEvent(name, { detail }));
   }
 
-  function setTrialStatus(message = 'Trial mode — saved on this device only') {
-    emit('lso:cloud-status', { kind: 'trial', message });
-  }
-
-  function readStorage(storage, key, fallback = null) {
+  function readSession() {
     try {
-      const value = storage.getItem(key);
-      return value === null ? fallback : value;
+      const parsed = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+      return parsed && typeof parsed.token === 'string' ? parsed : null;
     } catch {
-      return fallback;
+      return null;
     }
   }
 
-  function writeStorage(storage, key, value) {
+  function saveSession(token, account) {
     try {
-      storage.setItem(key, value);
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ token, account }));
       return true;
     } catch {
       return false;
     }
   }
 
-  function removeStorage(storage, key) {
-    try { storage.removeItem(key); } catch { /* Browser storage may be blocked. */ }
+  function clearSession() {
+    try { sessionStorage.removeItem(SESSION_KEY); } catch { /* Session may be blocked. */ }
   }
 
   function normalizeApprovalStatus(account) {
@@ -48,130 +44,23 @@
   }
 
   function normalizeAccount(account) {
-    const approvalStatus = normalizeApprovalStatus(account);
+    if (!account) return null;
     return {
-      ...account,
-      email: account?.email || '',
-      displayName: account?.displayName || account?.username || 'LSO Account',
-      role: account?.role === 'Administrator' ? 'Administrator' : 'Staff Account',
-      approvalStatus,
-      disabled: Boolean(account?.disabled),
-      isDefault: Boolean(account?.isDefault),
-      requestedAt: account?.requestedAt || account?.createdAt || new Date().toISOString(),
-      createdAt: account?.createdAt || account?.requestedAt || new Date().toISOString(),
-      approvedAt: account?.isDefault ? (account?.approvedAt || account?.createdAt || new Date().toISOString()) : (account?.approvedAt || ''),
-      approvedBy: account?.isDefault ? (account?.approvedBy || DEFAULT_USERNAME) : (account?.approvedBy || ''),
-      rejectedAt: account?.rejectedAt || '',
-      rejectedBy: account?.rejectedBy || ''
+      id: account.id,
+      email: account.email || '',
+      username: account.username || '',
+      displayName: account.displayName || account.username || 'LSO Account',
+      role: account.role === 'Administrator' ? 'Administrator' : 'Staff Account',
+      approvalStatus: normalizeApprovalStatus(account),
+      disabled: Boolean(account.disabled),
+      isDefault: Boolean(account.isDefault),
+      requestedAt: account.requestedAt || account.createdAt || '',
+      approvedAt: account.approvedAt || '',
+      approvedBy: account.approvedBy || '',
+      rejectedAt: account.rejectedAt || '',
+      rejectedBy: account.rejectedBy || '',
+      createdAt: account.createdAt || ''
     };
-  }
-
-  function loadRawAccounts() {
-    try {
-      let raw = readStorage(localStorage, ACCOUNTS_KEY, null);
-      if (raw === null) raw = readStorage(localStorage, LEGACY_ACCOUNTS_KEY, '[]');
-      const parsed = JSON.parse(raw || '[]');
-      return Array.isArray(parsed) ? parsed.map(normalizeAccount) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  function persistAccounts(accounts) {
-    const normalized = Array.isArray(accounts) ? accounts.map(normalizeAccount) : [];
-    const saved = writeStorage(localStorage, ACCOUNTS_KEY, JSON.stringify(normalized));
-    if (saved) emit('lso:accounts-changed', { count: normalized.length, source: 'local-trial' });
-    return saved;
-  }
-
-  function randomSalt() {
-    if (window.crypto?.getRandomValues) {
-      const bytes = new Uint8Array(16);
-      window.crypto.getRandomValues(bytes);
-      return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-    }
-    return `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
-  }
-
-  function fallbackHash(text) {
-    let first = 0x811c9dc5;
-    let second = 0x9e3779b9;
-    for (let index = 0; index < text.length; index += 1) {
-      const code = text.charCodeAt(index);
-      first ^= code;
-      first = Math.imul(first, 0x01000193);
-      second ^= code + index;
-      second = Math.imul(second, 0x85ebca6b);
-    }
-    return `${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`;
-  }
-
-  async function createPasswordHash(password, salt, method = 'auto') {
-    const text = `${salt}:${password}`;
-    const canUseSha256 = Boolean(window.crypto?.subtle && window.TextEncoder);
-    if ((method === 'auto' || method === 'sha256') && canUseSha256) {
-      try {
-        const bytes = new TextEncoder().encode(text);
-        const digest = await window.crypto.subtle.digest('SHA-256', bytes);
-        const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-        return `sha256$${hex}`;
-      } catch (error) {
-        if (method === 'sha256') throw error;
-      }
-    }
-    return `localhash$${fallbackHash(text)}`;
-  }
-
-  async function verifyPassword(password, account) {
-    if (!account?.passwordHash || !account?.salt) return false;
-    const method = account.passwordHash.startsWith('sha256$') ? 'sha256' : 'localhash';
-    const candidate = await createPasswordHash(password, account.salt, method);
-    return candidate === account.passwordHash;
-  }
-
-  async function ensureDefaultAccount() {
-    const accounts = loadRawAccounts();
-    const index = accounts.findIndex((account) => normalizeUsername(account.username) === normalizeUsername(DEFAULT_USERNAME));
-
-    if (index >= 0) {
-      const current = accounts[index];
-      accounts[index] = normalizeAccount({
-        ...current,
-        username: DEFAULT_USERNAME,
-        displayName: 'LSO Administrator',
-        role: 'Administrator',
-        approvalStatus: 'Approved',
-        disabled: false,
-        isDefault: true
-      });
-      if (!current.passwordHash || !current.salt) {
-        const salt = randomSalt();
-        accounts[index].salt = salt;
-        accounts[index].passwordHash = await createPasswordHash(DEFAULT_PASSWORD, salt);
-      }
-      persistAccounts(accounts);
-      return accounts;
-    }
-
-    const salt = randomSalt();
-    accounts.push(normalizeAccount({
-      id: window.crypto?.randomUUID ? window.crypto.randomUUID() : `account-${Date.now()}`,
-      username: DEFAULT_USERNAME,
-      email: '',
-      displayName: 'LSO Administrator',
-      role: 'Administrator',
-      salt,
-      passwordHash: await createPasswordHash(DEFAULT_PASSWORD, salt),
-      createdAt: new Date().toISOString(),
-      requestedAt: new Date().toISOString(),
-      approvalStatus: 'Approved',
-      approvedAt: new Date().toISOString(),
-      approvedBy: DEFAULT_USERNAME,
-      isDefault: true,
-      disabled: false
-    }));
-    persistAccounts(accounts);
-    return accounts;
   }
 
   function setMessage(id, message = '', success = false) {
@@ -207,93 +96,159 @@
     return source.charAt(0).toUpperCase() || 'A';
   }
 
-  function publicAccount(account) {
-    return {
-      id: account.id,
-      email: account.email || '',
-      username: account.username,
-      displayName: account.displayName,
-      role: account.role || 'Staff Account',
-      approvalStatus: normalizeApprovalStatus(account),
-      isDefault: Boolean(account.isDefault),
-      disabled: Boolean(account.disabled),
-      storageMode: 'Local Trial'
-    };
+  function startAccountRefresh() {
+    clearInterval(accountRefreshTimer);
+    accountRefreshTimer = setInterval(() => {
+      if (window.LSOCurrentAccount?.role === 'Administrator' && !document.hidden) {
+        refreshAccounts().catch(() => undefined);
+      }
+    }, 10000);
+  }
+
+  function stopAccountRefresh() {
+    clearInterval(accountRefreshTimer);
+    accountRefreshTimer = null;
   }
 
   function showApplication(account) {
-    window.LSOCurrentAccount = publicAccount(account);
-    document.body.dataset.accountRole = window.LSOCurrentAccount.role;
-    document.body.dataset.storageMode = 'trial';
+    const normalized = normalizeAccount(account);
+    window.LSOCurrentAccount = normalized;
+    document.body.dataset.accountRole = normalized.role;
+    document.body.dataset.storageMode = 'cloud';
     el('authScreen')?.classList.add('hidden');
     el('appShell')?.classList.remove('hidden');
-    if (el('currentAccountName')) el('currentAccountName').textContent = account.displayName || account.username;
-    if (el('currentAccountUsername')) el('currentAccountUsername').textContent = `@${account.username}`;
-    if (el('accountAvatar')) el('accountAvatar').textContent = accountInitial(account);
-    if (el('currentAccountRole')) el('currentAccountRole').textContent = `${account.role || 'Staff Account'} • Trial`;
-    document.querySelectorAll('.admin-only').forEach((node) => node.classList.toggle('hidden', account.role !== 'Administrator'));
-    setTrialStatus();
-    emit('lso:auth-changed', window.LSOCurrentAccount);
-    emit('lso:accounts-changed', { count: loadRawAccounts().length, source: 'local-trial' });
-    document.title = 'LSO Orchestra Management System — Trial Mode';
+    if (el('currentAccountName')) el('currentAccountName').textContent = normalized.displayName || normalized.username;
+    if (el('currentAccountUsername')) el('currentAccountUsername').textContent = `@${normalized.username}`;
+    if (el('accountAvatar')) el('accountAvatar').textContent = accountInitial(normalized);
+    if (el('currentAccountRole')) el('currentAccountRole').textContent = normalized.role;
+    document.querySelectorAll('.admin-only').forEach((node) => node.classList.toggle('hidden', normalized.role !== 'Administrator'));
+    emit('lso:auth-changed', normalized);
+    document.title = 'LSO Orchestra Management System';
+    startAccountRefresh();
   }
 
   function showLoginScreen({ preserveMessage = false } = {}) {
     window.LSOCurrentAccount = null;
     delete document.body.dataset.accountRole;
-    document.body.dataset.storageMode = 'trial';
+    document.body.dataset.storageMode = 'cloud';
     el('appShell')?.classList.add('hidden');
     el('authScreen')?.classList.remove('hidden');
     el('sidebar')?.classList.remove('open');
     el('memberModal')?.classList.add('hidden');
     document.body.style.overflow = '';
-    document.title = 'Login | LSO Trial Mode';
+    document.title = 'Login | LSO Orchestra Management System';
     el('loginForm')?.reset();
     el('registerForm')?.reset();
     if (el('loginUsername')) el('loginUsername').value = DEFAULT_USERNAME;
     if (el('loginPassword')) el('loginPassword').value = DEFAULT_PASSWORD;
     if (!preserveMessage) switchAuthMode('login');
-    setTrialStatus('Trial mode ready — records stay in this browser');
     emit('lso:auth-changed', null);
+    stopAccountRefresh();
+  }
+
+  function loginMessageForCode(code) {
+    const messages = {
+      invalid_credentials: 'The username or password is incorrect.',
+      pending: 'Your registration is pending administrator approval.',
+      rejected: 'Your registration was rejected. Please contact the administrator.',
+      disabled: 'This account has been disabled by an administrator.',
+      session_expired: 'Your session expired. Please log in again.'
+    };
+    return messages[code] || 'Login could not be completed.';
+  }
+
+  function registrationMessageForCode(code) {
+    const messages = {
+      invalid_username: 'Username must be 4–30 characters and may contain letters, numbers, periods, underscores, or hyphens.',
+      reserved_username: `${DEFAULT_USERNAME} is reserved for the default administrator.`,
+      invalid_display_name: 'Enter a valid display name.',
+      weak_password: 'Password must contain at least 6 characters.',
+      invalid_email: 'Enter a valid email address or leave it blank.',
+      username_taken: 'That username is already registered.'
+    };
+    return messages[code] || 'The registration could not be submitted.';
+  }
+
+  async function refreshAccounts() {
+    const active = window.LSOCurrentAccount;
+    if (!active) {
+      accountsCache = [];
+      emit('lso:accounts-changed', { count: 0, source: 'cloud' });
+      return accountsCache;
+    }
+
+    try {
+      if (active.role === 'Administrator') {
+        const result = await window.LSOCloud.listProfiles();
+        accountsCache = Array.isArray(result) ? result.map(normalizeAccount).filter(Boolean) : [];
+      } else {
+        accountsCache = [normalizeAccount(active)];
+      }
+      emit('lso:accounts-changed', { count: accountsCache.length, source: 'cloud' });
+      return accountsCache;
+    } catch (error) {
+      console.error('Unable to refresh accounts:', error);
+      return accountsCache;
+    }
+  }
+
+  async function authorize(account, token, { resumed = false } = {}) {
+    const normalized = normalizeAccount(account);
+    if (!normalized || normalizeApprovalStatus(normalized) !== 'Approved' || normalized.disabled) {
+      clearSession();
+      await window.LSOCloud.disconnect();
+      showLoginScreen({ preserveMessage: true });
+      setMessage('loginMessage', loginMessageForCode(normalized?.disabled ? 'disabled' : normalizeApprovalStatus(normalized)));
+      return false;
+    }
+
+    try {
+      await window.LSOCloud.loadSharedState();
+      const migrated = await window.LSOCloud.migrateLegacyIfNeeded(normalized.role === 'Administrator');
+      if (!saveSession(token, normalized)) {
+        throw new Error('This browser blocked session storage. Allow browser storage and try again.');
+      }
+      showApplication(normalized);
+      await refreshAccounts();
+      window.LSOApp?.refresh?.();
+      window.LSOOperations?.refreshAll?.();
+      if (migrated) {
+        setTimeout(() => window.LSOApp?.showToast?.('Existing records from this browser were moved to the shared online database.'), 60);
+      } else if (!resumed) {
+        setTimeout(() => window.LSOApp?.showToast?.('Connected to the shared online database.'), 60);
+      }
+      return true;
+    } catch (error) {
+      console.error('Shared database initialization failed:', error);
+      clearSession();
+      await window.LSOCloud.disconnect();
+      showLoginScreen({ preserveMessage: true });
+      setMessage('loginMessage', error.message || 'The shared database could not be opened.');
+      return false;
+    }
   }
 
   async function handleLogin(event) {
     event.preventDefault();
     setMessage('loginMessage');
-
     const username = el('loginUsername')?.value.trim() || '';
     const password = el('loginPassword')?.value || '';
+
+    if (!window.LSOCloud?.isConfigured?.()) {
+      setMessage('loginMessage', 'Supabase is not configured correctly. Check supabase-config.js.');
+      return;
+    }
+
     setFormBusy('loginForm', true);
-
     try {
-      const account = loadRawAccounts().find((item) => normalizeUsername(item.username) === normalizeUsername(username));
-      if (!account || !(await verifyPassword(password, account))) {
-        setMessage('loginMessage', 'The username or password is incorrect.');
+      const result = await window.LSOCloud.login(username, password);
+      if (!result?.ok) {
+        setMessage('loginMessage', loginMessageForCode(result?.code));
         return;
       }
-
-      const approval = normalizeApprovalStatus(account);
-      if (approval === 'Pending') {
-        setMessage('loginMessage', 'Your registration is pending administrator approval.');
-        return;
-      }
-      if (approval === 'Rejected') {
-        setMessage('loginMessage', 'Your registration was rejected. Please contact the administrator.');
-        return;
-      }
-      if (account.disabled) {
-        setMessage('loginMessage', 'This account has been disabled by an administrator.');
-        return;
-      }
-
-      if (!writeStorage(sessionStorage, SESSION_KEY, account.username)) {
-        setMessage('loginMessage', 'This browser blocked session storage. Allow browser storage and try again.');
-        return;
-      }
-
-      showApplication(account);
-      window.LSOApp?.refresh?.();
-      window.LSOOperations?.refreshAll?.();
+      await authorize(result.account, result.token);
+    } catch (error) {
+      setMessage('loginMessage', error.message || 'The shared database could not be reached.');
     } finally {
       setFormBusy('loginForm', false);
     }
@@ -318,15 +273,15 @@
       return;
     }
     if (!/^[A-Za-z0-9._-]{4,30}$/.test(username)) {
-      setMessage('registerMessage', 'Username must be 4–30 characters and may contain letters, numbers, periods, underscores, or hyphens.');
+      setMessage('registerMessage', registrationMessageForCode('invalid_username'));
       return;
     }
     if (normalizeUsername(username) === normalizeUsername(DEFAULT_USERNAME)) {
-      setMessage('registerMessage', `${DEFAULT_USERNAME} is reserved for the administrator.`);
+      setMessage('registerMessage', registrationMessageForCode('reserved_username'));
       return;
     }
     if (password.length < 6) {
-      setMessage('registerMessage', 'Password must contain at least 6 characters.');
+      setMessage('registerMessage', registrationMessageForCode('weak_password'));
       return;
     }
     if (password !== confirmPassword) {
@@ -336,31 +291,9 @@
 
     setFormBusy('registerForm', true);
     try {
-      const accounts = loadRawAccounts();
-      if (accounts.some((account) => normalizeUsername(account.username) === normalizeUsername(username))) {
-        setMessage('registerMessage', 'That username is already registered.');
-        return;
-      }
-
-      const salt = randomSalt();
-      const now = new Date().toISOString();
-      accounts.push(normalizeAccount({
-        id: window.crypto?.randomUUID ? window.crypto.randomUUID() : `account-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        username,
-        email,
-        displayName,
-        role: 'Staff Account',
-        salt,
-        passwordHash: await createPasswordHash(password, salt),
-        createdAt: now,
-        requestedAt: now,
-        approvalStatus: 'Pending',
-        isDefault: false,
-        disabled: false
-      }));
-
-      if (!persistAccounts(accounts)) {
-        setMessage('registerMessage', 'This browser blocked local storage. The account could not be saved.');
+      const result = await window.LSOCloud.registerAccount({ username, password, displayName, email });
+      if (!result?.ok) {
+        setMessage('registerMessage', registrationMessageForCode(result?.code));
         return;
       }
 
@@ -369,56 +302,72 @@
       if (el('loginUsername')) el('loginUsername').value = username;
       if (el('loginPassword')) el('loginPassword').value = '';
       setMessage('loginMessage', 'Registration submitted. The administrator must approve this account before login.', true);
+    } catch (error) {
+      setMessage('registerMessage', error.message || 'The registration could not reach the shared database.');
     } finally {
       setFormBusy('registerForm', false);
     }
   }
 
   async function handleLogout() {
-    removeStorage(sessionStorage, SESSION_KEY);
+    clearSession();
+    try { await window.LSOCloud.logout(); } catch { /* The local session is still cleared. */ }
     showLoginScreen();
   }
 
   async function saveAccounts(accounts) {
-    const active = window.LSOCurrentAccount;
-    if (!active || active.role !== 'Administrator') return false;
-
-    const current = loadRawAccounts();
-    const byId = new Map(current.map((account) => [account.id, account]));
-    const normalized = accounts.map((account) => {
-      const stored = byId.get(account.id) || {};
-      return normalizeAccount({
-        ...stored,
-        ...account,
-        salt: stored.salt,
-        passwordHash: stored.passwordHash
-      });
-    });
-
-    const defaultAccount = current.find((account) => account.isDefault || normalizeUsername(account.username) === normalizeUsername(DEFAULT_USERNAME));
-    if (defaultAccount && !normalized.some((account) => account.id === defaultAccount.id)) normalized.unshift(defaultAccount);
-    return persistAccounts(normalized);
+    if (window.LSOCurrentAccount?.role !== 'Administrator') return false;
+    try {
+      const result = await window.LSOCloud.saveAccounts(accounts);
+      accountsCache = Array.isArray(result) ? result.map(normalizeAccount).filter(Boolean) : accountsCache;
+      emit('lso:accounts-changed', { count: accountsCache.length, source: 'cloud' });
+      return true;
+    } catch (error) {
+      window.LSOApp?.showToast?.(error.message || 'Account changes could not be saved.', true);
+      return false;
+    }
   }
 
   async function deleteAccount(accountId) {
-    const active = window.LSOCurrentAccount;
-    if (!active || active.role !== 'Administrator') return false;
-    const accounts = loadRawAccounts();
-    const target = accounts.find((account) => account.id === accountId);
-    if (!target || target.isDefault || target.username === active.username) return false;
-    return persistAccounts(accounts.filter((account) => account.id !== accountId));
+    if (window.LSOCurrentAccount?.role !== 'Administrator') return false;
+    try {
+      const deleted = await window.LSOCloud.deleteAccount(accountId);
+      if (deleted) await refreshAccounts();
+      return Boolean(deleted);
+    } catch (error) {
+      window.LSOApp?.showToast?.(error.message || 'The account could not be deleted.', true);
+      return false;
+    }
   }
 
-  function refreshActiveAccount() {
-    const activeUsername = readStorage(sessionStorage, SESSION_KEY, '');
-    const account = loadRawAccounts().find((item) => normalizeUsername(item.username) === normalizeUsername(activeUsername));
-    if (account && normalizeApprovalStatus(account) === 'Approved' && !account.disabled) {
-      showApplication(account);
-      return true;
+  async function refreshActiveAccount() {
+    const stored = readSession();
+    if (!stored?.token) {
+      showLoginScreen();
+      return false;
     }
-    removeStorage(sessionStorage, SESSION_KEY);
-    showLoginScreen();
-    return false;
+
+    try {
+      const result = await window.LSOCloud.resumeSession(stored.token);
+      if (!result?.ok) {
+        clearSession();
+        showLoginScreen({ preserveMessage: true });
+        setMessage('loginMessage', loginMessageForCode(result?.code));
+        return false;
+      }
+      return authorize(result.account, stored.token, { resumed: true });
+    } catch (error) {
+      showLoginScreen({ preserveMessage: true });
+      setMessage('loginMessage', error.message || 'The shared database could not be reached.');
+      return false;
+    }
+  }
+
+  async function handleInvalidSession(event) {
+    clearSession();
+    await window.LSOCloud.disconnect();
+    showLoginScreen({ preserveMessage: true });
+    setMessage('loginMessage', event?.detail?.message || 'Your session expired. Please log in again.');
   }
 
   function wireAuthEvents() {
@@ -427,6 +376,7 @@
     el('loginForm')?.addEventListener('submit', handleLogin);
     el('registerForm')?.addEventListener('submit', handleRegistration);
     el('logoutButton')?.addEventListener('click', handleLogout);
+    window.addEventListener('lso:session-invalid', handleInvalidSession);
 
     document.querySelectorAll('[data-password-target]').forEach((button) => {
       button.addEventListener('click', () => {
@@ -441,14 +391,10 @@
   }
 
   window.LSOAuth = {
-    loadAccounts: () => loadRawAccounts().map((account) => ({ ...account, salt: undefined, passwordHash: undefined })),
+    loadAccounts: () => accountsCache.map((account) => ({ ...account })),
     saveAccounts,
     deleteAccount,
-    refreshAccounts: async () => {
-      const accounts = loadRawAccounts();
-      emit('lso:accounts-changed', { count: accounts.length, source: 'local-trial' });
-      return accounts.map((account) => ({ ...account, salt: undefined, passwordHash: undefined }));
-    },
+    refreshAccounts,
     getActiveAccount: () => window.LSOCurrentAccount ? { ...window.LSOCurrentAccount } : null,
     signOut: handleLogout,
     refreshActiveAccount
@@ -456,12 +402,28 @@
 
   async function initializeAuth() {
     wireAuthEvents();
-    await ensureDefaultAccount();
-    refreshActiveAccount();
+    showLoginScreen();
+
+    if (!window.LSOCloud?.isConfigured?.()) {
+      setMessage('loginMessage', 'Supabase is not configured correctly. Add the exact Project URL and publishable key to supabase-config.js.');
+      return;
+    }
+
+    try {
+      await window.LSOCloud.checkConnection();
+      await window.LSOCloud.bootstrapDefaultAdmin();
+      const stored = readSession();
+      if (stored?.token) {
+        await refreshActiveAccount();
+      }
+    } catch (error) {
+      showLoginScreen({ preserveMessage: true });
+      setMessage('loginMessage', error.message || 'The Supabase project could not be reached.');
+    }
   }
 
   initializeAuth().catch((error) => {
     showLoginScreen({ preserveMessage: true });
-    setMessage('loginMessage', `The local trial account system could not be initialized. ${error.message || 'Enable browser storage and reload.'}`);
+    setMessage('loginMessage', error.message || 'The online account system could not be initialized.');
   });
 })();

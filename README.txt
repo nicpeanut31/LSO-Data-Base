@@ -1,50 +1,46 @@
-LASALLIAN SYMPHONY ORCHESTRA MANAGEMENT SYSTEM
-MEMBERSHIP WORKFLOW AND ATTENDANCE INTELLIGENCE EDITION
-======================================================
+LASALLIAN SYMPHONY ORCHESTRA — ONLINE SHARED MANAGEMENT SYSTEM
+==============================================================
 
-This release upgrades the local trial system with a three-stage membership workflow,
-calendar attendance, organization-wide analytics, individual rehearsal history, and
-print-ready official documents.
+This release is the online counterpart of the Membership + Attendance Upgrade.
+The visible features and workflow were retained. The storage and account layer
+was changed from browser-only localStorage to a shared Supabase PostgreSQL
+backend.
 
-KEY FEATURES
-------------
-1. THREE-PERIOD MEMBERSHIP WORKFLOW
-   - Trainee Period
-   - Probationary Period
-   - Membership Period
-   - Separate directory toggles keep trainees and probationary profiles out of the
-     official Members list.
-   - Profiles move automatically based on their period start dates.
+PRESERVED FEATURES
+------------------
+- Attendance calendar
+- Individual attendance search, totals, percentages, and printable report
+- Overall member attendance totals, percentages, and printable report
+- Printable event roster
+- Trainee, Probationary, and Membership Period workflow
+- Automatic movement into the Members list at the Membership Period start date
+- Printable official member record from Member Lookup
+- Functional futuristic dashboard and notification center
+- Account approval, roles, alerts, backup, import, and activity logging
+- Instrument Inventory remains removed from the visible workflow
 
-2. ATTENDANCE CALENDAR
-   - Monthly calendar with scheduled events displayed directly on their dates.
-   - Select a date to open an existing event.
-   - Create a rehearsal directly on a selected date.
-   - Existing event roster entry and remarks remain available.
+ONLINE DATA MODEL
+-----------------
+public.lso_accounts  — usernames, hashed passwords, approval and roles
+public.lso_sessions  — hashed private session tokens
+public.system_state  — shared members, events, attendance, settings and activity
 
-3. ATTENDANCE ANALYTICS
-   - Overall Present, Late, Absent, Excused, recorded activity totals, and percentages.
-   - Per-member rehearsal counts and attendance rates.
-   - Individual member selection with detailed rehearsal history.
+The browser calls controlled PostgreSQL functions through Supabase RPC. Direct
+public table access is revoked. The interface keeps a local cache for speed, but
+Supabase is the source of truth after an approved login.
 
-4. PRINT-READY REPORTS
-   - Overall attendance report.
-   - Individual rehearsal attendance report.
-   - Selected event roster report.
-   - Official Member Lookup profile document.
-   - Reports open the browser print dialog and may be printed or saved as PDF.
+FILES THAT WERE CHANGED FOR ONLINE OPERATION
+--------------------------------------------
+auth.js
+cloud.js
+index.html (connection scripts and online status wording only)
+management.js (one online account-deletion confirmation label)
+supabase-config.js
+supabase-setup.sql
+START_HERE.txt
+README.txt
 
-5. FUTURISTIC FUNCTIONAL DASHBOARD
-   - Live membership-flow visualization.
-   - Attendance signal, upcoming schedule, official-member count, and profile-review count.
-   - Functional stage cards that open the correct membership list.
+All membership, attendance, dashboard, printing, styles, and workflow logic was
+otherwise preserved from the supplied upgrade.
 
-6. INSTRUMENT INVENTORY REMOVAL
-   - Removed from navigation, dashboard, notifications, and Action Center.
-   - Hidden legacy compatibility code is retained so older backups do not break.
-
-LOCAL TRIAL LIMITATION
-----------------------
-Records are stored in localStorage and therefore remain on the browser/device where
-they were entered. Use Complete Backup before clearing browser data. A repaired cloud
-backend is still required for automatic sharing across multiple devices.
+Read START_HERE.txt before replacing the live GitHub files.

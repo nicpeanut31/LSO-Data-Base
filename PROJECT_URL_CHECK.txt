@@ -1,0 +1,18 @@
+PROJECT URL CHECK
+=================
+
+Configured value:
+https://ffjvwffiwlwowqqkvwix.supabase.co
+
+An external check on July 16, 2026 could not resolve this hostname and returned
+a failed/502 connection. This usually means the project reference was copied
+incorrectly, or the project is unavailable.
+
+To verify:
+1. Open the correct Supabase project.
+2. Click Connect.
+3. Choose Framework > JavaScript.
+4. Copy Project URL.
+5. Paste it inside quotation marks in supabase-config.js.
+
+Do not paste the GitHub Pages URL into supabase-config.js.

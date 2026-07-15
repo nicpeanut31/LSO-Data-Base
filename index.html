@@ -24,7 +24,7 @@
 <span>✓ Calendar attendance, individual history, and printable reports</span>
 <span>✓ Action Center, roles, audit log, and complete backups</span>
 </div>
-<small>Trial mode is active. Accounts and records are saved only in this browser while the cloud connection is being repaired.</small>
+<small>Accounts and operational records are stored in one shared online database for authorized devices.</small>
 </div>
 <div class="auth-card">
 <div aria-label="Account access" class="auth-tabs" role="tablist">
@@ -120,7 +120,7 @@
 </div>
 <button class="logout-button" id="logoutButton" type="button">Log Out</button>
 <p>One Symphony, One Spirit,<br/>One Lasallian Legacy.</p>
-<small>Local trial database</small>
+<small>Shared online database</small>
 </div>
 </aside>
 <button aria-label="Close navigation" class="sidebar-overlay" id="sidebarOverlay" type="button"></button>
@@ -134,7 +134,7 @@
 <div class="topbar-actions">
 <div aria-label="System status" class="topbar-status">
 <span class="status-indicator" aria-hidden="true"></span>
-<div><strong id="systemStatusText">Trial mode — saved on this device only</strong><small id="currentDateLabel">Loading date…</small></div>
+<div><strong id="systemStatusText">Connecting to shared database…</strong><small id="currentDateLabel">Loading date…</small></div>
 </div>
 <div class="notification-center" id="notificationCenter">
 <button aria-expanded="false" aria-label="Open notifications" class="notification-button" id="notificationButton" type="button">
@@ -414,7 +414,7 @@
 <section class="view" id="accountsView">
 <article class="panel">
 <div class="panel-header stack-mobile"><div><p class="eyebrow">Administrator Only</p><h3>Account Management</h3><p class="panel-subtitle">Validate new registrations, assign roles, approve or reject access, and disable approved accounts.</p></div></div>
-<div class="account-security-note"><strong>Cloud security:</strong> Accounts use Supabase Authentication and database access is controlled by Row Level Security. Pending or disabled users cannot open shared records.</div>
+<div class="account-security-note"><strong>Cloud security:</strong> Passwords are hashed in PostgreSQL, sessions use private tokens, and direct public table access is blocked. Pending or disabled users cannot open shared records.</div>
 <div class="table-wrap"><table><thead><tr><th>Account</th><th>Username / Optional Email</th><th>Role</th><th>Requested</th><th>Access Status</th><th>Approved</th><th class="actions-column">Actions</th></tr></thead><tbody id="accountsTableBody"></tbody></table></div>
 </article>
 </section>
@@ -462,9 +462,9 @@
 </article>
 <article class="panel action-card danger-card">
 <div class="action-icon">!</div>
-<h3>Clear Local Trial Member Database</h3>
-<p>Remove all member records saved in this browser. Export a backup first.</p>
-<button class="button button-danger" id="clearDatabase">Clear Local Member Records</button>
+<h3>Clear Shared Member Database</h3>
+<p>Remove all member records from the shared database. Export a backup first.</p>
+<button class="button button-danger" id="clearDatabase">Clear Shared Member Records</button>
 </article>
 <article class="panel settings-card">
 <p class="eyebrow">Automation Settings</p>
@@ -485,8 +485,8 @@
 </article>
 <article class="panel storage-card">
 <p class="eyebrow">Storage Information</p>
-<h3>Local Trial Storage</h3>
-<p>This temporary version saves changes in this browser so you can open and test the full system. These trial records are not yet synchronized to other devices.</p>
+<h3>Shared Online Storage</h3>
+<p>Changes are synchronized through Supabase so approved users see the same records across devices. A local cache keeps the interface responsive while changes are being saved.</p>
 <div class="storage-meter"><span id="storageMeter"></span></div>
 <small id="storageLabel">0 records stored</small>
 </article>
@@ -636,6 +636,8 @@
 
 <div aria-live="polite" class="toast-region" id="toastRegion"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
 <script src="cloud.js"></script>
 <script src="app.js"></script>
 <script src="auth.js"></script>

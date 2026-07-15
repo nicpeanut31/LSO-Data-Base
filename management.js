@@ -762,7 +762,7 @@
       return;
     }
 
-    if (action === 'delete' && window.confirm(`Permanently delete the local trial account @${account.username}? Member records will not be deleted.`)) {
+    if (action === 'delete' && window.confirm(`Permanently delete the shared account @${account.username}? Member records will not be deleted.`)) {
       const deleted = await window.LSOAuth.deleteAccount(account.id);
       if (!deleted) return;
       logActivity('Deleted account', 'Accounts', account.username);

@@ -1,36 +1,83 @@
-LSO MEMBERSHIP + ATTENDANCE INTELLIGENCE UPGRADE
-================================================
+LSO MEMBERSHIP + ATTENDANCE — ONLINE SHARED VERSION
+===================================================
 
-LOGIN
+THIS PACKAGE PRESERVES THE CURRENT INTERFACE
+--------------------------------------------
+The attendance calendar, individual and overall reports, membership-stage
+workflow, printable member lookup, dashboard, and all other current screens
+remain unchanged. Only the files needed for shared online storage and accounts
+were replaced or configured.
+
+DEFAULT ADMINISTRATOR
+---------------------
 Username: SNA1161
 Password: SNA1161
 
-HOW TO OPEN
-1. Keep every file in this folder together.
-2. Open index.html, or upload every file to the root of your GitHub Pages repository.
-3. Refresh the live site with Ctrl + F5 after GitHub finishes deploying.
+WHAT THIS ONLINE VERSION DOES
+-----------------------------
+- Stores one shared copy of members, events, attendance, settings, and activity.
+- Synchronizes changes across approved devices approximately every 5 seconds.
+- Saves changes immediately to a local cache and queues them if the connection
+  briefly drops.
+- Uses username and password only. Email remains optional contact information.
+- Keeps new registrations Pending until an Administrator approves them.
+- Does not use Supabase email authentication and does not send confirmation mail.
 
-MEMBERSHIP WORKFLOW
-- Trainee Period, Probationary Period, and Membership Period are the only stages.
-- The Members page has three separate stage toggles.
-- The default Members list displays Membership Period only.
-- Trainee and Probationary profiles remain in their own lists.
-- When the Membership Period Start Date arrives, the profile automatically moves to Membership Period.
+REQUIRED SUPABASE SETUP
+-----------------------
+1. Open your Supabase project.
+2. Open SQL Editor > New query.
+3. Open supabase-setup.sql from this folder.
+4. Copy the ENTIRE SQL file, paste it into the query, and click Run.
+5. Wait for a successful result before uploading the website.
 
-ATTENDANCE
-- Monthly calendar for rehearsal and activity scheduling.
-- Click a date to open an event or create a rehearsal on that date.
-- Overall counts and percentages for Present, Late, Absent, and Excused.
-- Search/select one member to see total rehearsals and detailed history.
-- Print individual, overall, and event-roster reports. The browser print window can save them as PDF.
+PROJECT URL WARNING
+-------------------
+The supplied URL and publishable key are already placed in supabase-config.js.
+However, an external connection check could not resolve this supplied URL:
 
-MEMBER LOOKUP
-- Search any profile and use Print Record to generate an A4 official member document.
+https://ffjvwffiwlwowqqkvwix.supabase.co
 
-INSTRUMENT INVENTORY
-- Removed from navigation, dashboard, alerts, and normal workflow.
-- Legacy inventory data remains only inside old backups for compatibility and is not displayed.
+Before deployment, open Supabase > Connect > Framework > JavaScript and compare
+the Project URL character by character. If Supabase shows a different URL,
+replace only the url value in supabase-config.js. Keep quotation marks around it.
 
-STORAGE NOTE
-This is the local trial version. Data is saved in the current browser/device only.
-Download Complete Backup regularly before clearing browser data or moving to another version.
+GITHUB DEPLOYMENT
+-----------------
+1. Back up the current live system first.
+2. Replace the files in the GitHub Pages repository with every file here.
+3. Do not rename files with (1), (2), or other suffixes.
+4. Commit the files to the branch used by GitHub Pages.
+5. Wait for Pages deployment to finish.
+6. Open the live website and press Ctrl + F5.
+7. Log in using SNA1161 / SNA1161.
+
+MOVING EXISTING LOCAL RECORDS ONLINE
+------------------------------------
+Use the SAME browser, device, and exact GitHub Pages address where the current
+local records are visible. Do not clear browser data first.
+
+When the default Administrator logs in and the shared database is empty, the
+website automatically copies the existing members, events, attendance, settings,
+and activity records into Supabase. Other devices will then load the same data.
+
+SECURITY NOTES
+--------------
+- The publishable key may be stored in the public website configuration.
+- Never place a secret key or service_role key in GitHub.
+- Direct access to the database tables is blocked.
+- Passwords are stored as bcrypt hashes in PostgreSQL.
+- Browser sessions use random private tokens and expire after 30 days.
+
+TROUBLESHOOTING
+---------------
+"Required database functions are missing"
+Run the latest supabase-setup.sql completely.
+
+"Supabase project could not be reached"
+Copy the exact Project URL from Supabase > Connect and confirm the project is
+active, not paused or deleted.
+
+"Invalid username or password"
+Confirm the SQL ran successfully. The default account is created automatically
+when the website connects for the first time.
