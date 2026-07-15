@@ -1,0 +1,36 @@
+LSO MEMBERSHIP + ATTENDANCE INTELLIGENCE UPGRADE
+================================================
+
+LOGIN
+Username: SNA1161
+Password: SNA1161
+
+HOW TO OPEN
+1. Keep every file in this folder together.
+2. Open index.html, or upload every file to the root of your GitHub Pages repository.
+3. Refresh the live site with Ctrl + F5 after GitHub finishes deploying.
+
+MEMBERSHIP WORKFLOW
+- Trainee Period, Probationary Period, and Membership Period are the only stages.
+- The Members page has three separate stage toggles.
+- The default Members list displays Membership Period only.
+- Trainee and Probationary profiles remain in their own lists.
+- When the Membership Period Start Date arrives, the profile automatically moves to Membership Period.
+
+ATTENDANCE
+- Monthly calendar for rehearsal and activity scheduling.
+- Click a date to open an event or create a rehearsal on that date.
+- Overall counts and percentages for Present, Late, Absent, and Excused.
+- Search/select one member to see total rehearsals and detailed history.
+- Print individual, overall, and event-roster reports. The browser print window can save them as PDF.
+
+MEMBER LOOKUP
+- Search any profile and use Print Record to generate an A4 official member document.
+
+INSTRUMENT INVENTORY
+- Removed from navigation, dashboard, alerts, and normal workflow.
+- Legacy inventory data remains only inside old backups for compatibility and is not displayed.
+
+STORAGE NOTE
+This is the local trial version. Data is saved in the current browser/device only.
+Download Complete Backup regularly before clearing browser data or moving to another version.
